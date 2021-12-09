@@ -1,3 +1,2 @@
-rich~=10.13.0
-audible~=0.5.5
+rich==10.15.2
 requests~=2.26.0
