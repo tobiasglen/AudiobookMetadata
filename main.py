@@ -1,13 +1,11 @@
 import requests
 from rich import box, print_json
 from rich.prompt import Prompt, Confirm
-from rich.table import Table
 from rich.console import Console
+from audiobookshelf import AudiobookshelfBook, audiobookshelf_login, audiobookshelf_book_lookup, audiobookshelf_book_update
+from audnexus import audnexus_asin_lookup
 
 console = Console()
-
-# URL for the API
-audnex_url = "https://api.audnex.us/books"
 
 
 def search_audible(book_title, book_author):
@@ -35,42 +33,6 @@ def search_audible(book_title, book_author):
     return possible_asin
 
 
-def book_details_verify(asin_list):
-    console.line(count=1)  # Line break
-    aud_details = Table(show_header=True, header_style="bold cyan", box=box.HEAVY, border_style="dim", show_lines=True, title="Possible Matches", title_style="bold chartreuse2")
-    aud_details.add_column("Result", justify="center", style="chartreuse1")
-    aud_details.add_column("Title", justify="center", style="dodger_blue1")
-    aud_details.add_column("Author", justify="center", style="deep_pink1")
-    aud_details.add_column("Description", justify="center")
-    aud_details.add_column("Language", justify="center")
-    aud_details.add_column("ASIN", justify="center")
-
-    metadata_dict = {}
-    for count, asin in enumerate(asin_list, start=1):
-        api_call = requests.get(f"{audnex_url}/{asin}")
-
-        if not api_call.ok:  # Skip to next iteration if response from audnex is bad
-            continue
-
-        book_md = api_call.json()  # Load JSON & add row to table
-        aud_link = f"[link=https://www.audible.com/pd/{book_md['asin']}]{book_md['asin']}[/link]"  # Format a link to the audible details page
-
-        aud_details.add_row(
-            str(count),                     # Result
-            book_md["title"],               # Title
-            book_md["authors"][0]["name"],  # Author
-            book_md["description"],         # Description
-            book_md["language"],            # Language
-            aud_link                        # ASIN
-        )
-
-        # Update metadata_dict so we can prompt user for correct entry
-        metadata_dict[str(count)] = book_md
-
-    console.print(aud_details)
-    prompt_verify_book = Prompt.ask("Input event ID", choices=[*metadata_dict])
-    return metadata_dict[prompt_verify_book]
-
 
 if __name__ == '__main__':
     # Prompt user for book title & author (book title can not be blank)
@@ -82,15 +44,39 @@ if __name__ == '__main__':
     query_aud = search_audible(book_title=book_title_prompt, book_author=book_author_prompt)
 
     if bool(query_aud):  # If the function returned at-least 1 asin we can call new function to gt book details
-        book_details = book_details_verify(query_aud)
-        console.line(count=2)
-        console.print(f'OK, We got the audiobook metadata for "[chartreuse2]{book_details["title"]}[/chartreuse2]" by "[chartreuse2]{book_details["authors"][0]["name"]}[/chartreuse2]"\n')
+        aud_book_details = audnexus_asin_lookup(query_aud)
+        console.line(count=2)  # Print 2 blank lines
+        console.print(f'OK, We got the audiobook metadata for "[chartreuse2]{aud_book_details["title"]}[/chartreuse2]" by "[chartreuse2]{aud_book_details["authors"][0]["name"]}[/chartreuse2]"\n')
 
         # Ask if the user wants to see json output
-        if Confirm.ask(prompt="Show JSON output?", default=True):
-            print_json(data=book_details)
+        if Confirm.ask(prompt="Show JSON output?", default=False):
+            print_json(data=aud_book_details)
+            console.line(count=1)
 
-        # Now we start searching for a possible torrent
-        console.line(count=1)
+        # Prompt user if they want to search audiobookshelf for the book & update the books details if found
+        if Confirm.ask(prompt="Search audiobookshelf for the book?", default=True):
+            bearer_token = audiobookshelf_login()  # Get the bearer token
+            if bearer_token:
+                # Now try & find the book on audiobookshelf
+                audiobookshelf_lookup = audiobookshelf_book_lookup(book_title=book_title_prompt, book_author=book_author_prompt, token=bearer_token)
+                if audiobookshelf_lookup:
+                    console.print("\nBook found on audiobookshelf.\n", style="green")
+
+                    # Use the AudiobookshelfBook class to create a default book object
+                    p1 = AudiobookshelfBook(audiobookshelf_json=audiobookshelf_lookup, audnexus_json=aud_book_details)
+                    # Update the book genres & tags which we get back from the audnexus api (AKA audible)
+                    # TODO - Create a function to get the real genres & tags from the audible api
+                    p1.update_genres(genres=["Science Fiction & Fantasy", "Science Fiction"])
+                    p1.update_tags(tags=["Adventure", "Hard Science Fiction"])
+
+                    # Update the book on audiobookshelf
+                    f = audiobookshelf_book_update(book_id=audiobookshelf_lookup["id"], book_payload=p1.return_json(), token=bearer_token)
+                    if f:
+                        console.print("\nBook updated on audiobookshelf.\n", style="green")
+
+                else:
+                    console.print("\nBook not found on audiobookshelf.\n", style="red")
+            else:
+                console.print("\nError: Unable to get bearer token. Quitting...", style="red")
 
 
