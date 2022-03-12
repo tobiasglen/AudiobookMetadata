@@ -18,15 +18,15 @@ abs_headers = {
 
 def audiobookshelf_login():
     login_payload = {
-        "username": os.getenv("audiobookshelf_username"),
-        "password": os.getenv("audiobookshelf_password"),
+        "username": os.getenv("AUDIOBOOKSHELF_USERNAME"),
+        "password": os.getenv("AUDIOBOOKSHELF_PASSWORD"),
     }
-    login_request = requests.post(url=f'{os.getenv("audiobookshelf_url")}/login', data=login_payload)
+    login_request = requests.post(url=f'{os.getenv("AUDIOBOOKSHELF_URL")}/login', data=login_payload)
     return login_request.json()['user']['token'] if login_request.ok else None
 
 
 def audiobookshelf_book_lookup(book_title, book_author, token):
-    lookup_request = requests.get(url=f'{os.getenv("audiobookshelf_url")}/api/libraries/main/search?q={book_title}', headers={'Authorization': f'Bearer {token}'})
+    lookup_request = requests.get(url=f'{os.getenv("AUDIOBOOKSHELF_URL")}/api/libraries/main/search?q={book_title}', headers={'Authorization': f'Bearer {token}'})
     if not lookup_request.ok or len(lookup_request.json()['audiobooks']) == 0:
         return None
 
@@ -99,6 +99,6 @@ def audiobookshelf_book_update(book_id, book_payload, token):
     }
 
     # Update the book details in the audiobookshelf
-    update_book_request = requests.patch(url=f'{os.getenv("audiobookshelf_url")}/api/books/{book_id}', headers=headers, data=book_payload)
+    update_book_request = requests.patch(url=f'{os.getenv("AUDIOBOOKSHELF_URL")}/api/books/{book_id}', headers=headers, data=book_payload)
 
     return bool(update_book_request.ok)
