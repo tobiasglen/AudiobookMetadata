@@ -3,6 +3,7 @@ from rich import box
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.console import Console
+from rich.progress import track
 
 console = Console()
 audnex_url = "https://api.audnex.us/books"
@@ -28,7 +29,7 @@ def audnexus_asin_lookup(asin_list: list[str]) -> dict:
     aud_details.add_column("ASIN", justify="center")
 
     metadata_dict = {}
-    for count, asin in enumerate(asin_list, start=1):
+    for count, asin in track(enumerate(asin_list, start=1), total=len(asin_list), description="Searching Audnexus"):
         api_call = requests.get(f"{audnex_url}/{asin}")
 
         if not api_call.ok:  # Skip to next ASIN if response from audnex is bad
