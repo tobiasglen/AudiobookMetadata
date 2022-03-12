@@ -9,28 +9,29 @@ console = Console()
 
 
 def search_audible(book_title, book_author):
-    query = requests.get(
-        url="https://api.audible.com/1.0/catalog/products",
-        params={
-            "title": book_title,
-            "author": book_author,
-            "category_id": "18685580011"  # Only show English results
-        }
-    )
+    with console.status("Searching for possible matches on Audible...") as _:
+        query = requests.get(
+            url="https://api.audible.com/1.0/catalog/products",
+            params={
+                "title": book_title,
+                "author": book_author,
+                "category_id": "18685580011"  # Only show English results
+            }
+        )
 
-    if not query.ok:  # If the request failed then we can't continue so just exit
-        console.print("\nError: Unable to query audible API. Quitting...", style="red")
-        quit()
+        if not query.ok:  # If the request failed then we can't continue so just exit
+            console.print("\nError: Unable to query audible API. Quitting...", style="red")
+            quit()
 
-    possible_asin = []
-    # If any results are found we loop through them all & append each to a list
-    if query.json()["total_results"] != 0:
-        for result in query.json()["products"]:
-            # noinspection PyTypeChecker
-            possible_asin.append(result["asin"])
+        possible_asin = []
+        # If any results are found we loop through them all & append each to a list
+        if query.json()["total_results"] != 0:
+            for result in query.json()["products"]:
+                # noinspection PyTypeChecker
+                possible_asin.append(result["asin"])
 
-    # Return list of audible asin IDs for the book title & author we searched for
-    return possible_asin
+        # Return list of audible asin IDs for the book title & author we searched for
+        return possible_asin
 
 
 
@@ -46,7 +47,7 @@ if __name__ == '__main__':
     if bool(query_aud):  # If the function returned at-least 1 asin we can call new function to gt book details
         aud_book_details = audnexus_asin_lookup(query_aud)
         console.line(count=2)  # Print 2 blank lines
-        console.print(f'OK, We got the audiobook metadata for "[chartreuse2]{aud_book_details["title"]}[/chartreuse2]" by "[chartreuse2]{aud_book_details["authors"][0]["name"]}[/chartreuse2]"\n')
+        console.print(f'OK, We got the audiobook metadata for "[chartreuse2]{aud_book_details["title"]}[/chartreuse2]" by "[chartreuse2]{aud_book_details["authors"][0]["name"]}[/chartreuse2]"')
 
         # Ask if the user wants to see json output
         if Confirm.ask(prompt="Show JSON output?", default=False):
@@ -54,20 +55,23 @@ if __name__ == '__main__':
             console.line(count=1)
 
         # Prompt user if they want to search audiobookshelf for the book & update the books details if found
-        if Confirm.ask(prompt="Search audiobookshelf for the book?", default=True):
+        if Confirm.ask(prompt="\nSearch audiobookshelf for the book?", default=True):
             bearer_token = audiobookshelf_login()  # Get the bearer token
             if bearer_token:
                 # Now try & find the book on audiobookshelf
-                audiobookshelf_lookup = audiobookshelf_book_lookup(book_title=book_title_prompt, book_author=book_author_prompt, token=bearer_token)
+                audiobookshelf_lookup = audiobookshelf_book_lookup(book_title=aud_book_details["title"], book_author=aud_book_details["authors"][0]["name"], token=bearer_token)
                 if audiobookshelf_lookup:
-                    console.print("\nBook found on audiobookshelf.\n", style="green")
+                    console.print(f'Yay we found: "[dodger_blue1]{audiobookshelf_lookup["book"]["title"]}[/dodger_blue1]" by "[dodger_blue1]{audiobookshelf_lookup["book"]["author"]}[/dodger_blue1]" on audiobookshelf!\n')
+
+                    if Confirm.ask(prompt="Show audiobookshelf json response?", default=False):
+                        print_json(data=audiobookshelf_lookup)
+                        console.line(count=1)
 
                     # Use the AudiobookshelfBook class to create a default book object
                     p1 = AudiobookshelfBook(audiobookshelf_json=audiobookshelf_lookup, audnexus_json=aud_book_details)
                     # Update the book genres & tags which we get back from the audnexus api (AKA audible)
-                    # TODO - Create a function to get the real genres & tags from the audible api
-                    p1.update_genres(genres=["Science Fiction & Fantasy", "Science Fiction"])
-                    p1.update_tags(tags=["Adventure", "Hard Science Fiction"])
+                    p1.update_genres(genres=[g['name'] for g in aud_book_details["genres"] if g["type"] == "genre"])
+                    p1.update_tags(tags=[t['name'] for t in aud_book_details["genres"] if t["type"] == "tag"])
 
                     # Update the book on audiobookshelf
                     f = audiobookshelf_book_update(book_id=audiobookshelf_lookup["id"], book_payload=p1.return_json(), token=bearer_token)
