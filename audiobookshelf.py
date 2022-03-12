@@ -22,7 +22,6 @@ def audiobookshelf_login():
         "password": os.getenv("audiobookshelf_password"),
     }
     login_request = requests.post(url=f'{os.getenv("audiobookshelf_url")}/login', data=login_payload)
-    # print(f'audiobookshelf login request status code: {login_request.status_code}')
     return login_request.json()['user']['token'] if login_request.ok else None
 
 
